@@ -195,7 +195,9 @@ def _convert_single_page(
     # Second pass: process all blocks
     for block in result["Blocks"]:
         if block["BlockType"] == "LINE":
-            _add_line_block(result_data[1]["lines"], block, result["Blocks"])
+            # Skip lines that belong to tables
+            if block["Id"] not in table_line_ids:
+                _add_line_block(result_data[1]["lines"], block, result["Blocks"])
         elif block["BlockType"] == "TABLE":
             _add_table_block(result_data[1]["tables"], block, result["Blocks"])
 
@@ -273,7 +275,9 @@ def _convert_multiple_pages(
 
         elif block["BlockType"] == "LINE":
             page_num = block["Page"]
-            _add_line_block(result_data[page_num]["lines"], block, result["Blocks"])
+            # Skip lines that belong to tables
+            if block["Id"] not in table_line_ids:
+                _add_line_block(result_data[page_num]["lines"], block, result["Blocks"])
         elif block["BlockType"] == "TABLE":
             page_num = block["Page"]
             _add_table_block(result_data[page_num]["tables"], block, result["Blocks"])
@@ -367,7 +371,9 @@ def _extract_page_range(
                                 result_data[page_num]["lines"][child_id] = {}
 
         elif block["BlockType"] == "LINE":
-            _add_line_block(result_data[page_num]["lines"], block, result["Blocks"])
+            # Skip lines that belong to tables
+            if block["Id"] not in table_line_ids:
+                _add_line_block(result_data[page_num]["lines"], block, result["Blocks"])
         elif block["BlockType"] == "TABLE":
             _add_table_block(result_data[page_num]["tables"], block, result["Blocks"])
 

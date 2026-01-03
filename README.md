@@ -10,11 +10,10 @@ Based on [amazon-textract-hocr-output](https://github.com/aws-samples/amazon-tex
 ## Features
 
 - ✅ Convert Textract JSON to hOCR HTML format
-- ✅ **hOCR 1.2 compliant output**
+- ✅ hOCR 1.2 compliant output
 - ✅ Support for single and multi-page documents
-- ✅ **Table extraction with full line/word structure**
-- ✅ **Intelligent block grouping based on vertical overlap**
-- ✅ **Content ordered by vertical position (top to bottom)**
+- ✅ Basic Table extraction with full line/word structure
+- ✅ Block grouping based on vertical overlap
 - ✅ Extract specific pages or page ranges from multi-page documents
 - ✅ Automatic dimension detection from source images (PNG, JPEG, TIFF)
 - ✅ PDF dimension extraction support
@@ -22,8 +21,6 @@ Based on [amazon-textract-hocr-output](https://github.com/aws-samples/amazon-tex
 - ✅ Fallback to Textract's default 1000x1000 dimensions
 - ✅ Command-line interface and Python library
 - ✅ Preserves text confidence scores and bounding boxes
-- ✅ **Tables include complete ocr_line and ocrx_word structure**
-- ✅ Compatible with hOCR-based tools (Tesseract, OCRopus, etc.)
 
 ## Installation
 
