@@ -39,9 +39,9 @@ class TestGetDocumentDimensions:
         dims = get_document_dimensions(temp_image)
         assert dims == {"width": 800, "height": 600}
 
-    def test_nonexistent_file_fallback(self):
-        """Test fallback to defaults when file doesn't exist."""
-        dims = get_document_dimensions("nonexistent_file.png")
+    def test_no_file_fallback(self):
+        """Test fallback to defaults when no file path is provided."""
+        dims = get_document_dimensions()
         assert dims == {"width": 1000, "height": 1000}
 
 

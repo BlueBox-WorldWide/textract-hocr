@@ -74,7 +74,7 @@ https://github.com/aws-samples/amazon-textract-hocr-output
         default=None,
         help="Source image or PDF file to extract dimensions (optional). "
         "Supports common image formats (PNG, JPEG, TIFF) and PDF. "
-        "Falls back to Textract's default 1000x1000 if not provided or unreadable.",
+        "Falls back to Textract's default 1000x1000 if not provided.",
     )
 
     parser.add_argument(
@@ -147,11 +147,8 @@ https://github.com/aws-samples/amazon-textract-hocr-output
     if parsed_args.source:
         source_path = Path(parsed_args.source)
         if not source_path.exists():
-            logging.warning(
-                f"Source file '{parsed_args.source}' not found. "
-                "Using Textract default dimensions (1000x1000)."
-            )
-            parsed_args.source = None
+            logging.error(f"Source file '{parsed_args.source}' not found.")
+            return 1
 
     try:
         # Load Textract JSON

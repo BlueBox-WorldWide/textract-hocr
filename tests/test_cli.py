@@ -220,17 +220,14 @@ class TestCLIDimensions:
         
         output_file = tmp_path / "output.html"
         
-        # Should work but use defaults
+        # Should error when source file doesn't exist
         exit_code = main([
             str(input_file),
             str(output_file),
             "--source", "nonexistent.png"
         ])
         
-        assert exit_code == 0
-        content = output_file.read_text()
-        # Should fall back to 1000x1000
-        assert "bbox 0 0 1000 1000" in content
+        assert exit_code == 1
 
 
 class TestCLIOutputDirectory:
