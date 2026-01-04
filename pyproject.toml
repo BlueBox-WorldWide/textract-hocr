@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "textract-hocr"
-version = "0.1.0"
+version = "0.1.1"
 description = "Convert AWS Textract JSON output to hOCR format"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -32,7 +32,6 @@ classifiers = [
 dependencies = [
     "yattag>=1.14.0",
     "Pillow>=9.0.0",
-    "PyPDF2>=3.0.0",
 ]
 
 [project.optional-dependencies]

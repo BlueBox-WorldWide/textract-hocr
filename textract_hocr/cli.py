@@ -7,6 +7,7 @@ output to hOCR format.
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Optional
@@ -107,6 +108,14 @@ https://github.com/aws-samples/amazon-textract-hocr-output
     )
 
     parser.add_argument(
+        "--log-level",
+        type=str,
+        choices=["info", "warning", "error"],
+        default="warning",
+        help="Set logging level (default: warning). Controls verbosity of output.",
+    )
+
+    parser.add_argument(
         "--version",
         action="version",
         version="%(prog)s 0.1.0",
@@ -114,26 +123,39 @@ https://github.com/aws-samples/amazon-textract-hocr-output
 
     parsed_args = parser.parse_args(args)
 
+    # Configure logging based on user preference
+    log_levels = {
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }
+    logging.basicConfig(
+        level=log_levels[parsed_args.log_level],
+        format="%(levelname)s: %(message)s",
+    )
+
+    # Get logger for CLI
+    logger = logging.getLogger(__name__)
+
     # Validate input file exists
     input_path = Path(parsed_args.input)
     if not input_path.exists():
-        print(f"Error: Input file '{parsed_args.input}' not found.", file=sys.stderr)
+        logging.error(f"Input file '{parsed_args.input}' not found.")
         return 1
 
     # Validate source file if provided
     if parsed_args.source:
         source_path = Path(parsed_args.source)
         if not source_path.exists():
-            print(
-                f"Warning: Source file '{parsed_args.source}' not found. "
-                "Using Textract default dimensions (1000x1000).",
-                file=sys.stderr,
+            logging.warning(
+                f"Source file '{parsed_args.source}' not found. "
+                "Using Textract default dimensions (1000x1000)."
             )
             parsed_args.source = None
 
     try:
         # Load Textract JSON
-        print(f"Loading Textract results from {parsed_args.input}...")
+        logging.info(f"Loading Textract results from {parsed_args.input}...")
         with open(input_path, "r", encoding="utf-8") as f:
             textract_json = json.load(f)
 
@@ -141,11 +163,10 @@ https://github.com/aws-samples/amazon-textract-hocr-output
         dimensions = None
         if parsed_args.width is not None and parsed_args.height is not None:
             dimensions = {"width": parsed_args.width, "height": parsed_args.height}
-            print(f"Using forced dimensions: {parsed_args.width}x{parsed_args.height}")
+            logging.info(f"Using forced dimensions: {parsed_args.width}x{parsed_args.height}")
         elif parsed_args.width is not None or parsed_args.height is not None:
-            print(
-                "Warning: Both --width and --height must be specified to force dimensions.",
-                file=sys.stderr,
+            logging.warning(
+                "Both --width and --height must be specified to force dimensions."
             )
 
         # Determine pages to convert
@@ -154,16 +175,16 @@ https://github.com/aws-samples/amazon-textract-hocr-output
         last_page = parsed_args.last_page
 
         if first_page is None and last_page is None:
-            print(f"Converting {total_pages} page(s) to hOCR format...")
+            logging.info(f"Converting {total_pages} page(s) to hOCR format...")
         elif first_page is not None and last_page is not None:
             if first_page == last_page:
-                print(f"Converting page {first_page} to hOCR format...")
+                logging.info(f"Converting page {first_page} to hOCR format...")
             else:
-                print(f"Converting pages {first_page}-{last_page} to hOCR format...")
+                logging.info(f"Converting pages {first_page}-{last_page} to hOCR format...")
         elif first_page is not None:
-            print(f"Converting pages {first_page}-{total_pages} to hOCR format...")
+            logging.info(f"Converting pages {first_page}-{total_pages} to hOCR format...")
         else:  # last_page is not None
-            print(f"Converting pages 1-{last_page} to hOCR format...")
+            logging.info(f"Converting pages 1-{last_page} to hOCR format...")
 
         # Convert to hOCR
         hocr_output = textract_to_hocr(
@@ -181,20 +202,17 @@ https://github.com/aws-samples/amazon-textract-hocr-output
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(hocr_output)
 
-        print(f"✓ Successfully wrote hOCR output to {parsed_args.output}")
+        logging.info(f"✓ Successfully wrote hOCR output to {parsed_args.output}")
         return 0
 
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logging.error(str(e))
         return 1
     except KeyError as e:
-        print(
-            f"Error: Invalid Textract JSON format. Missing key: {e}",
-            file=sys.stderr,
-        )
+        logging.error(f"Invalid Textract JSON format. Missing key: {e}")
         return 1
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logging.error(str(e))
         return 1
 
 

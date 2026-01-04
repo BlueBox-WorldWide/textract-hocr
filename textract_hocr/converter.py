@@ -6,13 +6,13 @@ JSON output to hOCR HTML format, which is widely used for OCR output.
 """
 
 import json
+import logging
 from typing import Dict, Union, Optional
 from yattag import Doc, indent
 from PIL import Image
-try:
-    from PyPDF2 import PdfReader
-except ImportError:
-    PdfReader = None
+
+# Set up module logger
+logger = logging.getLogger(__name__)
 
 
 # Textract uses normalized coordinates (0-1), but reports dimensions as 1000x1000
@@ -26,45 +26,76 @@ def get_document_dimensions(
     dimensions: Optional[Dict[str, int]] = None,
 ) -> Dict[str, int]:
     """
-    Get page dimensions from an image or PDF file.
+    Get page dimensions from an image file or explicit dimensions parameter.
+
+    **IMPORTANT FOR PDFs**: When processing PDFs with Textract, you MUST provide
+    explicit dimensions via the `dimensions` parameter. These should match the
+    resolution at which Textract rasterized the PDF (typically 200-300 DPI).
+    
+    For example, if your PDF was processed at 300 DPI:
+    - A4 page (8.27" x 11.69") -> dimensions={'width': 2480, 'height': 3507}
+    - Letter page (8.5" x 11") -> dimensions={'width': 2550, 'height': 3300}
 
     Args:
-        file_path: Path to the source image or PDF file. If None, returns Textract defaults.
-        page_number: Page number to extract (1-indexed, used for PDFs).
-        dimensions: Optional dict with 'width' and 'height' to force specific dimensions.
+        file_path: Path to the source image file. Cannot reliably extract PDF dimensions.
+        page_number: Page number (1-indexed, currently unused for images).
+        dimensions: **Required for PDFs**. Dict with 'width' and 'height' in pixels
+                   matching Textract's rasterization resolution.
 
     Returns:
         Dictionary with 'width' and 'height' keys in pixels.
         Falls back to Textract's default 1000x1000 if file cannot be read.
+
+    Raises:
+        ValueError: If file_path is a PDF without explicit dimensions.
+
+    Examples:
+        # For images - dimensions are auto-detected
+        dims = get_document_dimensions('scan.png')
+        
+        # For PDFs - you MUST provide dimensions
+        dims = get_document_dimensions('doc.pdf', dimensions={'width': 2480, 'height': 3507})
     """
     # Use provided dimensions if specified
     if dimensions is not None:
+        logger.info(
+            f"Using provided dimensions: {dimensions['width']}x{dimensions['height']}"
+        )
         return dimensions
+
     if not file_path:
+        logger.info(
+            f"No source file provided, using Textract defaults: {TEXTRACT_DEFAULT_WIDTH}x{TEXTRACT_DEFAULT_HEIGHT}"
+        )
         return {"width": TEXTRACT_DEFAULT_WIDTH, "height": TEXTRACT_DEFAULT_HEIGHT}
 
+    # Check if it's a PDF - we cannot reliably extract dimensions
+    if file_path.lower().endswith(".pdf"):
+        error_msg = (
+            f"PDF file '{file_path}' requires explicit dimensions parameter. "
+            f"PDFs are rasterized by Textract at a specific DPI, and we cannot determine "
+            f"this from the PDF file alone. Please provide dimensions={'width': X, 'height': Y} "
+            f"matching the resolution Textract used (typically 200-300 DPI). "
+            f"Example for A4 at 300 DPI: dimensions={{'width': 2480, 'height': 3507}}"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
     try:
-        # Try to open as image first
+        # Try to open as image
         with Image.open(file_path) as img:
+            logger.info(
+                f"Extracted dimensions from image '{file_path}': {img.width}x{img.height}"
+            )
             return {"width": img.width, "height": img.height}
-    except Exception:
-        # If not an image, try as PDF
-        if PdfReader is not None:
-            try:
-                with open(file_path, "rb") as pdf_file:
-                    pdf = PdfReader(pdf_file)
-                    if len(pdf.pages) >= page_number:
-                        page = pdf.pages[page_number - 1]
-                        # Get mediabox dimensions (in points, 72 points = 1 inch)
-                        # Convert to pixels at 72 DPI (common for PDFs)
-                        mediabox = page.mediabox
-                        width = float(mediabox.width)
-                        height = float(mediabox.height)
-                        return {"width": int(width), "height": int(height)}
-            except Exception:
-                pass
+
+    except Exception as e:
+        logger.warning(f"Could not extract dimensions from '{file_path}': {e}")
 
     # Fallback to Textract defaults
+    logger.warning(
+        f"Using Textract defaults: {TEXTRACT_DEFAULT_WIDTH}x{TEXTRACT_DEFAULT_HEIGHT}"
+    )
     return {"width": TEXTRACT_DEFAULT_WIDTH, "height": TEXTRACT_DEFAULT_HEIGHT}
 
 
@@ -78,38 +109,45 @@ def textract_to_hocr(
     """
     Convert Textract JSON output to hOCR HTML format.
 
+    **IMPORTANT FOR PDFs**: When processing PDFs, you MUST provide the `dimensions`
+    parameter with the width and height (in pixels) matching the resolution at which
+    Textract rasterized the PDF. This is typically 200-300 DPI.
+
     Args:
         textract_result: Textract JSON output as dict or JSON string.
-        source_file: Optional path to source image/PDF for dimension extraction.
+        source_file: Optional path to source image file for dimension extraction.
+                    For PDFs, dimensions parameter is required instead.
         first_page: Optional first page to convert (1-indexed). If None, starts from page 1.
         last_page: Optional last page to convert (1-indexed). If None, goes to last page.
-        dimensions: Optional dict with 'width' and 'height' to override dimension detection.
-                   Example: {'width': 2550, 'height': 3300}
+        dimensions: **Required for PDFs**. Dict with 'width' and 'height' in pixels.
+                   For images, this overrides auto-detection if provided.
+                   Example: {'width': 2480, 'height': 3507} for A4 at 300 DPI
 
     Returns:
         hOCR HTML string with specified pages.
 
     Raises:
-        ValueError: If page range is invalid.
+        ValueError: If page range is invalid or if PDF provided without dimensions.
 
     Examples:
-        # Convert all pages
-        hocr = textract_to_hocr(data)
+        # Convert image with auto-detected dimensions
+        hocr = textract_to_hocr(data, source_file='scan.png')
         
-        # Convert page 3 only
-        hocr = textract_to_hocr(data, first_page=3, last_page=3)
+        # Convert PDF with explicit dimensions (300 DPI A4)
+        hocr = textract_to_hocr(data, source_file='doc.pdf', 
+                               dimensions={'width': 2480, 'height': 3507})
         
-        # Convert pages 2-5
-        hocr = textract_to_hocr(data, first_page=2, last_page=5)
-        
-        # Force specific dimensions
-        hocr = textract_to_hocr(data, dimensions={'width': 2550, 'height': 3300})
+        # Convert specific pages
+        hocr = textract_to_hocr(data, first_page=2, last_page=5,
+                               dimensions={'width': 2480, 'height': 3507})
     """
     # Parse JSON string if needed
     if isinstance(textract_result, str):
+        logger.info("Parsing Textract JSON string")
         textract_result = json.loads(textract_result)
 
     total_pages = textract_result["DocumentMetadata"]["Pages"]
+    logger.info(f"Document has {total_pages} page(s)")
 
     # Determine page range
     first = first_page if first_page is not None else 1
@@ -117,28 +155,33 @@ def textract_to_hocr(
 
     # Validate page range
     if first < 1 or first > total_pages:
-        raise ValueError(
-            f"first_page {first} is out of range. Document has {total_pages} pages."
-        )
+        error_msg = f"first_page {first} is out of range. Document has {total_pages} pages."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     if last < 1 or last > total_pages:
-        raise ValueError(
-            f"last_page {last} is out of range. Document has {total_pages} pages."
-        )
+        error_msg = f"last_page {last} is out of range. Document has {total_pages} pages."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     if first > last:
-        raise ValueError(
-            f"first_page ({first}) cannot be greater than last_page ({last})."
-        )
+        error_msg = f"first_page ({first}) cannot be greater than last_page ({last})."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    logger.info(f"Converting pages {first}-{last} to hOCR format")
 
     # Single page conversion
     if total_pages == 1:
+        logger.info("Using single-page conversion path")
         return _convert_single_page(textract_result, source_file, dimensions)
 
     # Multi-page: extract requested range
     if first == 1 and last == total_pages:
         # All pages - use optimized path
+        logger.info("Using multi-page conversion path (all pages)")
         return _convert_multiple_pages(textract_result, source_file, dimensions)
     else:
         # Specific range
+        logger.info(f"Using page range extraction path (pages {first}-{last})")
         return _extract_page_range(
             textract_result, first, last, source_file, dimensions
         )

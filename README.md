@@ -3,7 +3,7 @@
 Convert AWS Textract JSON output to hOCR format for use with document processing tools.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 Based on [amazon-textract-hocr-output](https://github.com/aws-samples/amazon-textract-hocr-output) by AWS Samples.
 
@@ -16,11 +16,12 @@ Based on [amazon-textract-hocr-output](https://github.com/aws-samples/amazon-tex
 - ✅ Block grouping based on vertical overlap
 - ✅ Extract specific pages or page ranges from multi-page documents
 - ✅ Automatic dimension detection from source images (PNG, JPEG, TIFF)
-- ✅ PDF dimension extraction support
+- ✅ Explicit dimension specification for PDFs (required)
 - ✅ Force custom dimensions (override auto-detection)
 - ✅ Fallback to Textract's default 1000x1000 dimensions
 - ✅ Command-line interface and Python library
 - ✅ Preserves text confidence scores and bounding boxes
+- ✅ Configurable logging levels (info, warning, error)
 
 ## Installation
 
@@ -55,9 +56,15 @@ Convert entire document:
 textract-to-hocr input.json output.html
 ```
 
-Convert with source image for accurate dimensions:
+Convert with source image for automatic dimension detection:
 ```bash
 textract-to-hocr input.json output.html --source image.png
+```
+
+Convert PDF with explicit dimensions (required for PDFs):
+```bash
+# For A4 at 300 DPI (8.27" x 11.69")
+textract-to-hocr input.json output.html --width 2480 --height 3507
 ```
 
 Convert specific page only:
@@ -80,6 +87,18 @@ Force specific dimensions (override auto-detection):
 textract-to-hocr input.json output.html --width 2550 --height 3300
 ```
 
+Control logging verbosity:
+```bash
+# Verbose output (info level)
+textract-to-hocr input.json output.html --log-level info
+
+# Default (warnings only)
+textract-to-hocr input.json output.html --log-level warning
+
+# Quiet (errors only)
+textract-to-hocr input.json output.html --log-level error
+```
+
 ### Python Library
 
 #### Convert entire document
@@ -100,7 +119,7 @@ with open('output.html', 'w', encoding='utf-8') as f:
     f.write(hocr_html)
 ```
 
-#### Convert with source image for accurate dimensions
+#### Convert with source image for automatic dimension detection
 
 ```python
 from textract_hocr import textract_to_hocr
@@ -109,8 +128,28 @@ import json
 with open('textract_output.json', 'r') as f:
     textract_result = json.load(f)
 
-# Provide source image path
+# Provide source image path for auto-detection
 hocr_html = textract_to_hocr(textract_result, source_file='scan.png')
+
+with open('output.html', 'w', encoding='utf-8') as f:
+    f.write(hocr_html)
+```
+
+#### Convert PDF with explicit dimensions (required)
+
+```python
+from textract_hocr import textract_to_hocr
+import json
+
+with open('textract_output.json', 'r') as f:
+    textract_result = json.load(f)
+
+# For PDFs, you MUST provide explicit dimensions matching Textract's rasterization
+# Example: A4 at 300 DPI (8.27" x 11.69")
+hocr_html = textract_to_hocr(
+    textract_result,
+    dimensions={'width': 2480, 'height': 3507}
+)
 
 with open('output.html', 'w', encoding='utf-8') as f:
     f.write(hocr_html)
@@ -125,12 +164,12 @@ import json
 with open('textract_output.json', 'r') as f:
     textract_result = json.load(f)
 
-# Extract page 2 only
+# Extract page 2 only (with explicit dimensions for PDF)
 hocr_html = textract_to_hocr(
     textract_result, 
     first_page=2,
     last_page=2,
-    source_file='document.pdf'
+    dimensions={'width': 2480, 'height': 3507}  # Required for PDFs
 )
 
 with open('page2.html', 'w', encoding='utf-8') as f:
@@ -146,12 +185,12 @@ import json
 with open('textract_output.json', 'r') as f:
     textract_result = json.load(f)
 
-# Extract pages 3-5
+# Extract pages 3-5 (with explicit dimensions for PDF)
 hocr_html = textract_to_hocr(
     textract_result,
     first_page=3,
     last_page=5,
-    source_file='document.pdf'
+    dimensions={'width': 2550, 'height': 3300}  # Letter at 300 DPI
 )
 
 with open('pages_3_5.html', 'w', encoding='utf-8') as f:
@@ -182,14 +221,21 @@ with open('output.html', 'w', encoding='utf-8') as f:
 ```python
 from textract_hocr import get_document_dimensions
 
-# From image
+# From image (auto-detected)
 dims = get_document_dimensions('image.png')
 print(f"Width: {dims['width']}, Height: {dims['height']}")
 
-# From PDF (specific page)
-dims = get_document_dimensions('document.pdf', page_number=3)
+# For PDFs, you MUST provide explicit dimensions
+# This will raise ValueError:
+# dims = get_document_dimensions('document.pdf')  # ERROR!
 
-# Force specific dimensions
+# Instead, provide dimensions explicitly:
+dims = get_document_dimensions(
+    'document.pdf',
+    dimensions={'width': 2480, 'height': 3507}
+)
+
+# Or use dimensions parameter alone
 dims = get_document_dimensions(dimensions={'width': 2550, 'height': 3300})
 
 # Fallback to Textract defaults
@@ -211,9 +257,19 @@ The hOCR format is widely supported by:
 
 The converter handles document dimensions in the following priority order:
 
-1. **Image files** (PNG, JPEG, TIFF, etc.): Extracts actual pixel dimensions
-2. **PDF files**: Extracts page dimensions from PDF mediabox
-3. **Fallback**: Uses Textract's default 1000×1000 normalized dimensions
+1. **Explicit dimensions** (via `dimensions` parameter): Uses provided width/height
+2. **Image files** (PNG, JPEG, TIFF, etc.): Auto-extracts actual pixel dimensions
+3. **PDF files**: **CANNOT auto-extract** - you MUST provide explicit `dimensions` parameter
+4. **Fallback**: Uses Textract's default 1000×1000 normalized dimensions
+
+### Why PDFs Require Explicit Dimensions
+
+Textract rasterizes PDFs at a specific DPI (typically 200-300) before processing. The original PDF dimensions don't reliably indicate the resolution Textract used. Therefore, you must provide the dimensions matching Textract's rasterization:
+
+- **A4 at 300 DPI**: `{'width': 2480, 'height': 3507}` (8.27" × 11.69")
+- **Letter at 300 DPI**: `{'width': 2550, 'height': 3300}` (8.5" × 11")
+- **A4 at 200 DPI**: `{'width': 1654, 'height': 2339}`
+- **Letter at 200 DPI**: `{'width': 1700, 'height': 2200}`
 
 Textract returns normalized coordinates (0-1 range). This tool converts them to pixel coordinates using the actual document dimensions for accuracy.
 
@@ -250,10 +306,9 @@ Tables detected by Textract are converted to float div elements with `ocr_table`
 
 ## Requirements
 
-- Python 3.7+
+- Python 3.8+
 - yattag >= 1.14.0
 - Pillow >= 9.0.0 (for image dimension extraction)
-- PyPDF2 >= 3.0.0 (for PDF dimension extraction)
 
 ## License
 
@@ -291,11 +346,41 @@ If you encounter any issues or have questions:
 
 ## Changelog
 
-### 0.1.0 (2026-01-03)
+### 0.1.1 (2026-01-04)
+
+**Breaking Changes:**
+- **PDF dimension handling changed**: PDFs now require explicit `dimensions` parameter. Auto-extraction from PDF files has been removed due to reliability issues with determining Textract's rasterization DPI.
+- Attempting to process a PDF without providing `dimensions` will now raise a `ValueError` with clear instructions.
+
+**Improvements:**
+- Added comprehensive logging throughout the conversion process
+- Better error messages with actionable guidance for PDF dimension requirements
+- Improved documentation with detailed examples for PDF processing at different DPIs
+- Clearer function docstrings with examples for both image and PDF workflows
+
+**Dependency Changes:**
+- Removed PyPDF2 dependency (no longer needed)
+
+**Migration Guide:**
+If you were using PDFs with auto-detection:
+```python
+# Old (v0.1.0) - no longer works
+hocr = textract_to_hocr(data, source_file='document.pdf')
+
+# New (v0.1.1) - provide explicit dimensions
+hocr = textract_to_hocr(
+    data,
+    dimensions={'width': 2480, 'height': 3507}  # A4 at 300 DPI
+)
+```
+
+### 0.1.0 (2026-01-04)
 
 - Initial release
 - Support for single and multi-page conversion
-- Image and PDF dimension extraction
+- Image dimension auto-detection (PNG, JPEG, TIFF)
+- PDF dimension extraction (removed in 0.1.1)
 - Command-line interface
 - Python library API
 - Textract default dimension fallback
+- Block grouping based on vertical overlap
